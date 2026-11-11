@@ -1,0 +1,6 @@
+{
+  "name": "Brasa & Roble — Asadero Artesanal",
+  "description": "Prototipo interactivo para asadero de pollos al carbón y leña con menú personalizable, calculador de banquetes, carrito de pedidos y panel de comandas y control de hornos en vivo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
