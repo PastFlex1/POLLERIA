@@ -5,26 +5,25 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  LayoutGrid,
+  UtensilsCrossed,
   ClipboardList,
   MapPin,
   Flame,
   Wallet,
-  LogOut,
   Search,
-  ChevronRight,
-  ShoppingCart,
+  ShoppingBag,
   Plus,
   Minus,
   Pencil,
-  Settings,
-  Bell,
-  Star,
+  SlidersHorizontal,
+  Check,
+  Tag,
   Printer,
   AlertCircle,
   User,
   X,
   BookOpen,
+  Star,
 } from 'lucide-react';
 import {
   PosModule,
@@ -72,6 +71,40 @@ import {
   buildEmployeePayrollItem,
 } from './utils/accountingLogic';
 
+const BUILD_MEAL_EXTRAS = [
+  {
+    id: 'papas',
+    label: 'Papas',
+    weight: '180g',
+    imageUrl: '/assets/images/acompanamientos_criollos_1794335777748.jpg',
+  },
+  {
+    id: 'aji',
+    label: 'Ají Casa',
+    weight: '4oz',
+    imageUrl: '/assets/images/hero_pollo_brasa_1794335771940.jpg',
+  },
+  {
+    id: 'ensalada',
+    label: 'Ensalada',
+    weight: '120g',
+    imageUrl: '/assets/images/combo_familiar_brasa_1794335773635.jpg',
+  },
+  {
+    id: 'menestra',
+    label: 'Menestra',
+    weight: '160g',
+    imageUrl: '/assets/images/medio_pollo_artesanal_1794335775071.jpg',
+  },
+] as const;
+
+const PORTION_WEIGHT_LABELS: Record<string, string> = {
+  '8 Presas (Tradicional)': '8 Presas · 1.4kg',
+  '4 Cuartos': '4 Cuartos · 1.4kg',
+  'Entero sin cortar': 'Entero · 1.4kg',
+  Deshuesado: 'Fileteado · 1.1kg',
+};
+
 export default function App() {
   // Active workspace module
   const [activeModule, setActiveModule] = useState<PosModule>('facturacion');
@@ -93,10 +126,23 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] =
     useState<ProductCategory>('todos');
   const [searchPlu, setSearchPlu] = useState<string>('');
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const [showAllDishes, setShowAllDishes] = useState<boolean>(false);
   const [editingHeaderDetails, setEditingHeaderDetails] =
     useState<boolean>(false);
   const [brokenImages, setBrokenImages] = useState<Record<string, boolean>>({});
+
+  // Dishly Hero Configurator State
+  const [featuredProductId, setFeaturedProductId] = useState<string>(
+    INITIAL_POS_PRODUCTS[0].id
+  );
+  const [heroCut, setHeroCut] = useState<string>(CUT_PRESETS[0]);
+  const [heroQuantity, setHeroQuantity] = useState<number>(1);
+  const [selectedExtras, setSelectedExtras] = useState<string[]>([
+    'papas',
+    'aji',
+    'ensalada',
+  ]);
 
   // Active Invoice / Ticket State in POS (Right Column)
   const [docType, setDocType] = useState<InvoiceDocType>('consumidor_final');
@@ -111,32 +157,39 @@ export default function App() {
   const [tableOrAddress, setTableOrAddress] = useState<string>(
     'Av. 6 de Diciembre N34-120 y Portugal, Quito'
   );
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
-  const [promoCodeLabel, setPromoCodeLabel] = useState<string>('BRASA10');
+  const [discountPercent, setDiscountPercent] = useState<number>(10);
+  const [promoCodeLabel, setPromoCodeLabel] = useState<string>('brasa10');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('efectivo');
-  // null = the cashier has not typed an amount; we suggest one rounded up from the total
   const [cashReceivedInput, setCashReceivedInput] = useState<number | null>(
     null
   );
   const [billingError, setBillingError] = useState<string>('');
 
-  // Seed 2 items in the active Cart/Ticket matching the reference layout
+  // Seed 3 items in the active Cart/Ticket matching the Dishly reference layout
   const [activeLines, setActiveLines] = useState<InvoiceLineItem[]>([
     {
       lineId: 'seed-line-1',
       product: INITIAL_POS_PRODUCTS[0], // Pollo Entero Brasa ($14.00)
-      quantity: 2,
+      quantity: 1,
       unitPrice: INITIAL_POS_PRODUCTS[0].price,
       cutNote: CUT_PRESETS[0],
-      subtotal: roundUSD(INITIAL_POS_PRODUCTS[0].price * 2),
+      subtotal: INITIAL_POS_PRODUCTS[0].price,
     },
     {
       lineId: 'seed-line-2',
-      product: INITIAL_POS_PRODUCTS[1], // Combo Familiar ($18.50)
+      product: INITIAL_POS_PRODUCTS[3], // Costillas a la Leña ($9.50)
       quantity: 1,
-      unitPrice: INITIAL_POS_PRODUCTS[1].price,
-      cutNote: CUT_PRESETS[1],
-      subtotal: INITIAL_POS_PRODUCTS[1].price,
+      unitPrice: INITIAL_POS_PRODUCTS[3].price,
+      cutNote: '450g · Leña Roble',
+      subtotal: INITIAL_POS_PRODUCTS[3].price,
+    },
+    {
+      lineId: 'seed-line-3',
+      product: INITIAL_POS_PRODUCTS[12], // Jarra Naranjilla 1L ($3.50)
+      quantity: 1,
+      unitPrice: INITIAL_POS_PRODUCTS[12].price,
+      cutNote: '1.0L · Fruta Natural',
+      subtotal: INITIAL_POS_PRODUCTS[12].price,
     },
   ]);
 
@@ -177,9 +230,21 @@ export default function App() {
     });
   }, [products, selectedCategory, searchPlu]);
 
-  const displayedDishes = showAllDishes
-    ? filteredProducts
-    : filteredProducts.slice(0, 6); // 6 fills 2 or 3 columns; the 4-column grid hides the last two
+  // Keep featuredProductId synced when filtering categories
+  const featuredProduct = useMemo(() => {
+    const found = products.find((p) => p.id === featuredProductId);
+    if (found && (selectedCategory === 'todos' || found.category === selectedCategory)) {
+      return found;
+    }
+    return filteredProducts[0] ?? products[0];
+  }, [products, featuredProductId, selectedCategory, filteredProducts]);
+
+  // Pairings / Catalog list below Hero
+  const pairingDishes = useMemo(() => {
+    const others = filteredProducts.filter((p) => p.id !== featuredProduct.id);
+    const list = others.length > 0 ? others : products.filter((p) => p.id !== featuredProduct.id);
+    return showAllDishes ? list : list.slice(0, 6);
+  }, [filteredProducts, products, featuredProduct.id, showAllDishes]);
 
   // Live Invoice Calculations
   const currentTotals = useMemo(
@@ -223,6 +288,12 @@ export default function App() {
     setBrokenImages((prev) => ({ ...prev, [id]: true }));
   };
 
+  const toggleExtra = (id: string) => {
+    setSelectedExtras((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
   // Applies a new set of ticket lines only if stock and rotisserie quarters allow it
   const tryUpdateLines = (nextLines: InvoiceLineItem[]): boolean => {
     const stock = checkStockAvailability(
@@ -239,9 +310,14 @@ export default function App() {
     return true;
   };
 
-  // Add product to right-hand ticket (places the updated/new item at the top of the cart so it's immediately visible)
-  const handleAddProductToTicket = (product: PosProduct) => {
-    const cutToUse = product.requiresCut ? CUT_PRESETS[0] : 'Estándar';
+  // Add product to right-hand ticket with custom quantity and cut note
+  const handleAddProductToTicket = (
+    product: PosProduct,
+    qtyToAdd: number = 1,
+    customCut?: string
+  ) => {
+    const cutToUse =
+      customCut ?? (product.requiresCut ? CUT_PRESETS[0] : product.subtitle.slice(0, 22));
     const existingIndex = activeLines.findIndex(
       (l) => l.product.id === product.id && l.cutNote === cutToUse
     );
@@ -249,10 +325,11 @@ export default function App() {
     let updatedLines: InvoiceLineItem[];
     if (existingIndex > -1) {
       const target = activeLines[existingIndex];
+      const nextQty = target.quantity + qtyToAdd;
       const incremented: InvoiceLineItem = {
         ...target,
-        quantity: target.quantity + 1,
-        subtotal: roundUSD((target.quantity + 1) * target.unitPrice),
+        quantity: nextQty,
+        subtotal: roundUSD(nextQty * target.unitPrice),
       };
       updatedLines = [
         incremented,
@@ -263,16 +340,36 @@ export default function App() {
         {
           lineId: `line-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
           product,
-          quantity: 1,
+          quantity: qtyToAdd,
           unitPrice: product.price,
           cutNote: cutToUse,
-          subtotal: product.price,
+          subtotal: roundUSD(product.price * qtyToAdd),
         },
         ...activeLines,
       ];
     }
 
     tryUpdateLines(updatedLines);
+  };
+
+  const handleAddHeroDishToOrder = () => {
+    const extrasNames = BUILD_MEAL_EXTRAS.filter((e) =>
+      selectedExtras.includes(e.id)
+    ).map((e) => e.label);
+    const baseCut = featuredProduct.requiresCut ? heroCut : 'Porción Estándar';
+    const noteWithExtras =
+      extrasNames.length > 0
+        ? `${baseCut} + ${extrasNames.slice(0, 2).join(', ')}`
+        : baseCut;
+
+    handleAddProductToTicket(featuredProduct, heroQuantity, noteWithExtras);
+    setHeroQuantity(1);
+  };
+
+  const handleSelectDishForHero = (dish: PosProduct) => {
+    setFeaturedProductId(dish.id);
+    setHeroQuantity(1);
+    setHeroCut(CUT_PRESETS[0]);
   };
 
   const handleUpdateLineQuantity = (lineId: string, delta: number) => {
@@ -296,7 +393,6 @@ export default function App() {
     }
   };
 
-  // Switching channel clears the destination so an address is never reused as a table number
   const handleChangeChannel = (next: ServiceChannel) => {
     if (next === channel) return;
     setChannel(next);
@@ -305,7 +401,6 @@ export default function App() {
     if (next !== 'mostrador') setEditingHeaderDetails(true);
   };
 
-  // Cycle cut preset when clicking the white edit pill on a cart line
   const handleCycleLineCut = (lineId: string) => {
     setActiveLines((prev) =>
       prev.map((line) => {
@@ -318,17 +413,16 @@ export default function App() {
     );
   };
 
-  // Cycle promo discount when clicking the dark promotion code pill
   const handleCyclePromoDiscount = () => {
-    if (discountPercent === 0) {
-      setDiscountPercent(10);
-      setPromoCodeLabel('BRASA10 (-10%)');
-    } else if (discountPercent === 10) {
+    if (discountPercent === 10) {
       setDiscountPercent(5);
-      setPromoCodeLabel('ROBLE5 (-5%)');
-    } else {
+      setPromoCodeLabel('roble5');
+    } else if (discountPercent === 5) {
       setDiscountPercent(0);
-      setPromoCodeLabel('BRASA10');
+      setPromoCodeLabel('sin promo');
+    } else {
+      setDiscountPercent(10);
+      setPromoCodeLabel('brasa10');
     }
   };
 
@@ -399,16 +493,13 @@ export default function App() {
       status: 'emitida',
     };
 
-    // Deduct stock units per product
     setProducts((prev) => applyLinesToStock(prev, activeLines, -1));
-
     setInvoices((prev) => [newInvoice, ...prev]);
     setInspectingInvoice(newInvoice);
 
-    // Reset the ticket so the next customer starts clean
     setActiveLines([]);
     setDiscountPercent(0);
-    setPromoCodeLabel('BRASA10');
+    setPromoCodeLabel('sin promo');
     setDocType('consumidor_final');
     setCustomerName(CONSUMIDOR_FINAL_NAME);
     setCustomerTaxId(CONSUMIDOR_FINAL_ID);
@@ -430,7 +521,6 @@ export default function App() {
           : inv
       )
     );
-    // Return the cancelled units to stock
     setProducts((prev) => applyLinesToStock(prev, target.lines, 1));
   };
 
@@ -530,132 +620,48 @@ export default function App() {
     label: string;
     icon: React.FC<{ className?: string }>;
   }[] = [
-    { id: 'facturacion', label: 'Facturar', icon: LayoutGrid },
-    { id: 'facturas', label: 'Facturas', icon: ClipboardList },
+    { id: 'facturacion', label: 'Platos Principales', icon: UtensilsCrossed },
+    { id: 'facturas', label: 'Libro Facturas', icon: ClipboardList },
     { id: 'inventario', label: 'Asadores', icon: Flame },
-    { id: 'arqueo', label: 'Finanzas', icon: Wallet },
+    { id: 'arqueo', label: 'Caja y Turno', icon: Wallet },
     { id: 'contabilidad', label: 'Contabilidad', icon: BookOpen },
   ];
 
   const ticketItemsCount = activeLines.reduce((sum, l) => sum + l.quantity, 0);
 
   const scrollToTicket = () => {
-    document
-      .getElementById('pos-ticket')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const flameLogo = (sizeClass: string, gradientId: string) => (
-    <svg
-      viewBox="0 0 64 64"
-      aria-hidden="true"
-      className={`${sizeClass} drop-shadow-[0_4px_12px_rgba(240,78,62,0.45)] transition-transform group-hover:scale-105`}
-    >
-      <defs>
-        <linearGradient id={gradientId} x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#D32F2F" />
-          <stop offset="55%" stopColor="#F04E3E" />
-          <stop offset="100%" stopColor="#FFB300" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M35 6C24 12 18 22 24 31C28 36 39 37 38 45C37 51 28 53 21 48C17 53 23 60 34 59C46 58 53 48 49 38C45 29 33 28 33 20C33 15 39 12 44 14C44 9 40 6 35 6Z"
-        fill={`url(#${gradientId})`}
-      />
-      <circle cx="24" cy="14" r="3" fill="#FFA000" />
-      <circle cx="44" cy="22" r="2.5" fill="#FFCA28" />
-    </svg>
-  );
-
-  const openCustomerSettings = () => {
     setActiveModule('facturacion');
-    setEditingHeaderDetails(true);
-    setTimeout(scrollToTicket, 50);
+    setTimeout(() => {
+      document
+        .getElementById('pos-ticket')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 40);
   };
-
-  const openLastReceipt = () => {
-    if (invoices.length > 0) setInspectingInvoice(invoices[0]);
-  };
-
-  const utilityButtonClass =
-    'flex h-10 w-10 items-center justify-center rounded-full bg-[#4A3232] text-white transition-transform hover:scale-105 hover:bg-[#5C3D3D]';
 
   return (
-    <div
-      className="min-h-dvh w-full lg:p-5"
-      style={{
-        background:
-          'radial-gradient(circle at 92% 50%, rgba(120, 38, 32, 0.42) 0%, rgba(20, 18, 20, 0.98) 55%, #111012 100%)',
-      }}
-    >
-      {/* App Shell: full-bleed on phones/tablets, framed card on desktop */}
-      <div className="mx-auto flex min-h-dvh max-w-[1440px] flex-col bg-[#1C1C1E] text-zinc-100 lg:h-[calc(100dvh-2.5rem)] lg:min-h-0 lg:flex-row lg:overflow-hidden lg:rounded-[32px] lg:shadow-[0_32px_80px_rgba(0,0,0,0.75)] lg:ring-1 lg:ring-white/5">
-        {/* MOBILE / TABLET TOP BAR */}
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/5 bg-[#252528]/95 px-4 py-2.5 backdrop-blur-md sm:px-6 lg:hidden">
+    <div className="min-h-dvh w-full bg-[#E6E7EE] px-2 py-2 sm:px-4 sm:py-4 lg:px-6 lg:py-5">
+      {/* Framed Dishly App Container */}
+      <div className="mx-auto flex min-h-[calc(100dvh-1rem)] max-w-[1440px] flex-col rounded-[28px] bg-[#F4F5F9] p-2.5 text-[#111318] shadow-[0_24px_70px_rgba(15,23,42,0.08)] ring-1 ring-white sm:min-h-[calc(100dvh-2rem)] sm:rounded-[34px] sm:p-4 lg:p-5">
+        {/* =====================================================================
+            TOP HORIZONTAL NAVIGATION BAR (Dishly Header)
+           ===================================================================== */}
+        <header className="sticky top-2 z-30 flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white bg-[#F9FAFC]/95 px-4 py-2.5 shadow-[0_4px_20px_rgba(15,23,42,0.04)] backdrop-blur-md sm:px-6">
+          {/* Left: Brand Title */}
           <button
             type="button"
             onClick={() => setActiveModule('facturacion')}
-            aria-label="Ir a Facturación"
-            className="group flex min-w-0 items-center gap-2.5 text-left focus:outline-none"
+            className="flex items-center gap-2 text-left focus:outline-none"
           >
-            {flameLogo('h-9 w-9 shrink-0', 'flameGradMobile')}
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-white">
-                Brasa &amp; Roble
-              </p>
-              <p className="truncate text-[10px] text-zinc-400">
-                {navItems.find((n) => n.id === activeModule)?.label ??
-                  'Facturación'}{' '}
-                · Caja 01
-              </p>
-            </div>
+            <span className="text-lg font-extrabold tracking-tight text-[#E11D2E] sm:text-xl">
+              Brasa &amp; Roble
+            </span>
           </button>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={openCustomerSettings}
-              aria-label="Configurar datos del cliente (cédula / RUC)"
-              className={utilityButtonClass}
-            >
-              <Settings className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={openLastReceipt}
-              aria-label="Ver última factura emitida"
-              className={utilityButtonClass}
-            >
-              <Bell className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
 
-        {/* DESKTOP SIDEBAR with Sculptural Curved Rail (icons on lg, labels on xl) */}
-        <aside className="relative hidden w-[96px] shrink-0 flex-col items-stretch justify-between bg-[#252528] py-5 lg:flex xl:w-[215px]">
-          <div className="relative z-10 flex justify-center xl:justify-start xl:px-[9px]">
-            <button
-              type="button"
-              onClick={() => setActiveModule('facturacion')}
-              aria-label="Ir a Facturación"
-              className="group flex items-center gap-2 text-left focus:outline-none"
-            >
-              {flameLogo('h-12 w-12 shrink-0', 'flameGradDesktop')}
-              <span className="hidden text-sm leading-tight font-bold text-white xl:block">
-                Brasa &amp;
-                <br />
-                Roble
-              </span>
-            </button>
-          </div>
-
+          {/* Center: Horizontal Category / Module Pills (Desktop) */}
           <nav
-            aria-label="Navegación del sistema"
-            className="relative z-10 my-auto flex flex-col gap-3 py-5"
+            aria-label="Navegación principal"
+            className="hidden items-center gap-1.5 lg:flex xl:gap-2"
           >
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-0 w-[74px] rounded-r-[44px] bg-[#505054] shadow-inner"
-            />
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeModule === item.id;
@@ -664,151 +670,115 @@ export default function App() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveModule(item.id)}
-                  aria-label={item.label}
-                  title={item.label}
                   aria-current={isActive ? 'page' : undefined}
-                  className="group relative z-10 flex items-center gap-3 py-1 text-left"
+                  className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition-all whitespace-nowrap ${
+                    isActive
+                      ? 'bg-white text-[#E11D2E] shadow-[0_3px_12px_rgba(15,23,42,0.06)] ring-1 ring-zinc-200/60'
+                      : 'text-zinc-600 hover:bg-white/60 hover:text-zinc-900'
+                  }`}
                 >
-                  <div className="relative flex w-[74px] shrink-0 items-center justify-center">
-                    <div
-                      className={`flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
-                        isActive
-                          ? 'bg-[#F04E3E]/20 text-[#F04E3E]'
-                          : 'text-white/90 group-hover:text-white'
-                      }`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    {isActive && (
-                      <span
-                        aria-hidden="true"
-                        className="absolute -right-1.5 h-2.5 w-2.5 rounded-full bg-[#F04E3E] ring-4 ring-[#252528]"
-                      />
-                    )}
-                  </div>
-                  <span
-                    className={`hidden text-xs font-semibold tracking-wide whitespace-nowrap transition-colors xl:inline ${
-                      isActive
-                        ? 'text-[#F04E3E]'
-                        : 'text-zinc-400 group-hover:text-zinc-200'
+                  <Icon
+                    className={`h-4 w-4 shrink-0 ${
+                      isActive ? 'text-[#E11D2E]' : 'text-zinc-500'
                     }`}
-                  >
-                    {item.label}
-                  </span>
+                  />
+                  <span>{item.label}</span>
                 </button>
               );
             })}
-
-            <button
-              type="button"
-              onClick={() => setActiveModule('arqueo')}
-              aria-label="Cerrar turno"
-              title="Cerrar turno"
-              className="group relative z-10 flex items-center gap-3 py-1 text-left"
-            >
-              <div className="flex w-[74px] shrink-0 items-center justify-center">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl text-white/90 group-hover:text-white">
-                  <LogOut className="h-5 w-5" />
-                </div>
-              </div>
-              <span className="hidden text-xs font-semibold text-zinc-400 group-hover:text-zinc-200 xl:inline">
-                Cerrar Turno
-              </span>
-            </button>
           </nav>
 
-          <div className="relative z-10 flex flex-col items-center gap-3 xl:flex-row xl:justify-center">
+          {/* Right: Search + SRI Settings + Red Cart Pill */}
+          <div className="flex items-center gap-2.5">
+            {searchOpen ? (
+              <div className="flex items-center rounded-full border border-zinc-200 bg-white px-3 py-1.5 shadow-inner">
+                <Search className="mr-2 h-3.5 w-3.5 text-zinc-400" />
+                <input
+                  type="search"
+                  value={searchPlu}
+                  onChange={(e) => {
+                    setSearchPlu(e.target.value);
+                    if (activeModule !== 'facturacion') {
+                      setActiveModule('facturacion');
+                    }
+                  }}
+                  placeholder="Buscar plato o PLU..."
+                  className="w-32 bg-transparent text-xs text-zinc-800 placeholder-zinc-400 focus:outline-none sm:w-44"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchPlu('');
+                    setSearchOpen(false);
+                  }}
+                  aria-label="Cerrar búsqueda"
+                  className="ml-1 text-zinc-400 hover:text-zinc-700"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveModule('facturacion');
+                  setSearchOpen(true);
+                }}
+                aria-label="Buscar plato o código PLU"
+                title="Buscar plato o código PLU"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-700 transition-colors hover:bg-white hover:shadow-xs"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={openCustomerSettings}
-              aria-label="Configurar datos del cliente (cédula / RUC)"
-              title="Configurar cédula / RUC del cliente"
-              className={utilityButtonClass}
+              onClick={scrollToTicket}
+              className="inline-flex items-center gap-2 rounded-full bg-[#E11D2E] px-4 py-2 text-xs font-bold text-white shadow-[0_6px_16px_rgba(225,29,46,0.28)] transition-transform hover:scale-102 hover:bg-[#C81625]"
             >
-              <Settings className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={openLastReceipt}
-              aria-label="Ver última factura emitida"
-              title="Ver última factura (RIDE 80mm)"
-              className={utilityButtonClass}
-            >
-              <Bell className="h-4 w-4" />
+              <ShoppingBag className="h-3.5 w-3.5" />
+              <span>Carrito</span>
+              {ticketItemsCount > 0 && (
+                <span className="font-mono-tabular rounded-full bg-white/20 px-1.5 py-0.2 text-[11px] font-extrabold text-white">
+                  {ticketItemsCount}
+                </span>
+              )}
             </button>
           </div>
-        </aside>
+        </header>
 
-        {/* MAIN WORKSPACE CONTENT */}
-        <main
-          className={`min-w-0 flex-1 px-4 pt-5 sm:px-6 lg:overflow-y-auto lg:p-7 ${
-            activeModule === 'facturacion' && ticketItemsCount > 0
-              ? 'pb-40'
-              : 'pb-28'
-          }`}
-        >
+        {/* =====================================================================
+            MAIN WORKSPACE CONTENT
+           ===================================================================== */}
+        <main className="mt-3.5 flex-1 pb-24 lg:pb-2">
           {activeModule === 'facturacion' && (
-            <div className="grid grid-cols-1 gap-7 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_1fr] xl:grid-cols-[minmax(0,1fr)_380px]">
-              {/* LEFT COLUMN: Search + Categories + Popular Dishes */}
-              <div className="@container min-w-0 space-y-7 lg:col-start-1 lg:row-start-1">
-                {/* 1. Top Pill Search Bar */}
-                <div className="relative flex items-center rounded-full border border-zinc-700/80 bg-[#171719] py-1.5 pr-1.5 pl-5 shadow-inner">
-                  <input
-                    type="search"
-                    value={searchPlu}
-                    onChange={(e) => setSearchPlu(e.target.value)}
-                    aria-label="Buscar plato, código PLU, bebida o combo"
-                    placeholder="Buscar plato, PLU o bebida..."
-                    className="w-full bg-transparent text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (searchPlu) setSearchPlu('');
-                    }}
-                    aria-label={searchPlu ? 'Limpiar búsqueda' : 'Buscar'}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#525257] text-white transition-colors hover:bg-[#636368]"
-                  >
-                    {searchPlu ? (
-                      <X className="h-4 w-4" />
-                    ) : (
-                      <Search className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-
-                {/* 2. Categories Section (Circular Gradient Badges) */}
-                <section aria-labelledby="pos-categories-heading">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2
-                        id="pos-categories-heading"
-                        className="text-lg font-bold tracking-tight text-white"
-                      >
-                        Categorías
-                      </h2>
-                      <p className="mt-0.5 text-xs text-zinc-400">
-                        <span className="font-semibold text-[#F04E3E]">
-                          6+ Categorías
-                        </span>{' '}
-                        activas en terminal de facturación
-                      </p>
-                    </div>
-
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_350px] xl:grid-cols-[minmax(0,1fr)_380px]">
+              {/* ===============================================================
+                  LEFT WHITE PANEL: Meal Category + Hero Dish + Recommended Pairings
+                 =============================================================== */}
+              <div className="flex min-w-0 flex-col justify-between rounded-[26px] bg-white p-5 shadow-[0_4px_24px_rgba(15,23,42,0.03)] sm:p-7">
+                <div>
+                  {/* 1. Meal Category Header & Filter Icon */}
+                  <div className="flex items-center justify-between gap-2">
+                    <h1 className="text-base font-extrabold tracking-tight text-zinc-900 sm:text-lg">
+                      Categoría de Platos
+                    </h1>
                     <button
                       type="button"
-                      onClick={() => setSelectedCategory('todos')}
-                      className="group flex items-center gap-2 text-xs font-semibold text-zinc-200 hover:text-white whitespace-nowrap shrink-0"
+                      onClick={() => setShowAllDishes((v) => !v)}
+                      title="Mostrar u ocultar catálogo completo"
+                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold text-[#E11D2E] transition-colors hover:bg-red-50"
                     >
-                      <span>Ver Todas</span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#525257] text-white transition-transform group-hover:translate-x-0.5">
-                        <ChevronRight className="h-4 w-4" />
+                      <SlidersHorizontal className="h-4 w-4" />
+                      <span className="hidden sm:inline">
+                        {showAllDishes ? 'Vista Compacta' : 'Ver Todos (14)'}
                       </span>
                     </button>
                   </div>
 
-                  {/* Circular Category Icons Row */}
-                  <div className="no-scrollbar -mx-4 mt-4 flex snap-x gap-2 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 @lg:mx-0 @lg:grid @lg:grid-cols-6 @lg:gap-3 @lg:overflow-visible @lg:px-0 lg:mx-0 lg:px-0">
+                  {/* 2. Horizontal Category Pills Row (Black active pill matching Dishly) */}
+                  <div className="no-scrollbar mt-3.5 flex items-center gap-2 overflow-x-auto pb-1">
                     {CATEGORY_CIRCLES.map((cat) => {
                       const active = selectedCategory === cat.id;
                       return (
@@ -816,757 +786,725 @@ export default function App() {
                           key={cat.id}
                           type="button"
                           onClick={() => setSelectedCategory(cat.id)}
-                          className="group flex w-[78px] shrink-0 snap-start flex-col items-center text-center focus:outline-none @lg:w-auto"
+                          className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
+                            active
+                              ? 'bg-[#111318] text-white shadow-xs'
+                              : 'bg-[#F5F6FA] text-zinc-600 hover:bg-zinc-200/70 hover:text-zinc-900'
+                          }`}
                         >
-                          <div
-                            className={`relative flex h-16 w-16 items-center justify-center rounded-full p-1.5 transition-all duration-150 ${
-                              active
-                                ? 'bg-gradient-to-b from-[#F04E3E] to-[#8E1C13] ring-2 ring-[#F04E3E]/60 scale-105'
-                                : 'bg-gradient-to-b from-[#45413E] to-[#282626] hover:scale-105'
-                            }`}
-                          >
-                            {!brokenImages[`cat-${cat.id}`] ? (
-                              <img
-                                src={cat.imageUrl}
-                                alt={cat.label}
-                                referrerPolicy="no-referrer"
-                                onError={() => markImgBroken(`cat-${cat.id}`)}
-                                className="h-12 w-12 rounded-full object-cover shadow-md"
-                              />
-                            ) : (
-                              <span className="text-xs font-bold text-white">
-                                {cat.label.slice(0, 2)}
-                              </span>
-                            )}
-                          </div>
-                          <span
-                            className={`mt-2 text-xs font-semibold transition-colors ${
-                              active
-                                ? 'text-[#F04E3E]'
-                                : 'text-zinc-300 group-hover:text-white'
-                            }`}
-                          >
-                            {cat.label}
-                          </span>
+                          {cat.label}
+                        </button>
+                      );
+                    })}
+
+                    {/* Quick dish pills for fast switching */}
+                    {filteredProducts.slice(0, 3).map((dish) => {
+                      const isFeatured = featuredProduct.id === dish.id;
+                      return (
+                        <button
+                          key={`pill-${dish.id}`}
+                          type="button"
+                          onClick={() => handleSelectDishForHero(dish)}
+                          className={`hidden rounded-full px-3.5 py-1.5 text-xs font-medium transition-all whitespace-nowrap shrink-0 xl:inline-flex ${
+                            isFeatured
+                              ? 'bg-red-50 font-bold text-[#E11D2E] ring-1 ring-[#E11D2E]/30'
+                              : 'bg-[#F5F6FA] text-zinc-500 hover:text-zinc-900'
+                          }`}
+                        >
+                          {dish.shortName}
                         </button>
                       );
                     })}
                   </div>
-                </section>
 
-                {/* 3. Popular Dishes Section (Floating Cutout Dish Cards) */}
-                <section aria-labelledby="pos-dishes-heading">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2
-                        id="pos-dishes-heading"
-                        className="text-lg font-bold tracking-tight text-white"
-                      >
-                        Platos Más Vendidos
-                      </h2>
-                      <p className="mt-0.5 text-xs text-zinc-400">
-                        <span className="font-semibold text-[#F04E3E]">
-                          {filteredProducts.length} Platos
-                        </span>{' '}
-                        listos para agregar a la factura con un clic
-                      </p>
+                  {/* 3. HERO DISH CONFIGURATOR (Centerpiece matching "Rotini Delight") */}
+                  <div className="mt-6 grid grid-cols-1 items-center gap-6 md:grid-cols-12 lg:gap-8">
+                    {/* Left Circular High-Impact Plate Photo */}
+                    <div className="relative flex justify-center md:col-span-5">
+                      <div className="relative">
+                        {/* Decorative warm glow behind plate */}
+                        <div
+                          aria-hidden="true"
+                          className="absolute -inset-3 rounded-full bg-gradient-to-tr from-amber-100/70 via-red-50/50 to-emerald-50/60 blur-xl"
+                        />
+                        <div className="relative h-52 w-52 overflow-hidden rounded-full border-[10px] border-[#F6F7FB] bg-zinc-100 shadow-[0_24px_50px_rgba(15,23,42,0.16)] sm:h-64 sm:w-64 xl:h-72 xl:w-72">
+                          {!brokenImages[featuredProduct.id] ? (
+                            <img
+                              src={featuredProduct.imageUrl}
+                              alt={featuredProduct.shortName}
+                              referrerPolicy="no-referrer"
+                              onError={() => markImgBroken(featuredProduct.id)}
+                              className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-lg font-extrabold text-[#E11D2E]">
+                              {featuredProduct.plu}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Floating Rating & Stock Pill */}
+                        <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-zinc-200/80 bg-white px-3 py-1 text-[11px] font-bold text-zinc-800 shadow-md">
+                          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                          <span>{featuredProduct.rating.toFixed(1)}</span>
+                          <span className="text-zinc-300">·</span>
+                          <span className="font-mono-tabular text-zinc-500">
+                            {featuredProduct.plu}
+                          </span>
+                          <span className="text-zinc-300">·</span>
+                          <span className="text-emerald-600">
+                            {featuredProduct.stockUnits} disp.
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
+                    {/* Right Dish Details, Cut Size, Build Your Meal & Add to Order */}
+                    <div className="space-y-4 md:col-span-7">
+                      <div>
+                        <h2 className="text-2xl font-extrabold tracking-tight text-zinc-900 sm:text-3xl">
+                          {featuredProduct.shortName}
+                        </h2>
+                        <p className="mt-1.5 max-w-lg text-xs leading-relaxed text-zinc-500 sm:text-sm">
+                          {featuredProduct.name}. {featuredProduct.subtitle},
+                          asado lentamente a las brasas de carbón de roble con
+                          adobo artesanal de la casa.
+                        </p>
+                      </div>
+
+                      {/* SIZE / CORTE PILLS */}
+                      <div>
+                        <span className="block text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+                          Corte y Presentación
+                        </span>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {CUT_PRESETS.map((cut) => {
+                            const isSelected = heroCut === cut;
+                            return (
+                              <button
+                                key={cut}
+                                type="button"
+                                onClick={() => setHeroCut(cut)}
+                                className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-all ${
+                                  isSelected
+                                    ? 'bg-[#111318] text-white shadow-xs'
+                                    : 'border border-dashed border-zinc-300 bg-white text-zinc-700 hover:border-zinc-500'
+                                }`}
+                              >
+                                {PORTION_WEIGHT_LABELS[cut] ?? cut}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* BUILD YOUR MEAL / COMPLEMENTOS */}
+                      <div>
+                        <span className="block text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+                          Arma tu Pedido (Guarniciones en Comanda)
+                        </span>
+                        <div className="mt-2 flex flex-wrap gap-3 pb-2">
+                          {BUILD_MEAL_EXTRAS.map((extra) => {
+                            const checked = selectedExtras.includes(extra.id);
+                            return (
+                              <button
+                                key={extra.id}
+                                type="button"
+                                onClick={() => toggleExtra(extra.id)}
+                                className={`group relative flex w-20 flex-col items-center rounded-2xl border border-dashed p-2.5 pb-4 text-center transition-all ${
+                                  checked
+                                    ? 'border-zinc-400 bg-[#FAFBFD] shadow-2xs'
+                                    : 'border-zinc-200 bg-white opacity-65 hover:opacity-100'
+                                }`}
+                              >
+                                <img
+                                  src={extra.imageUrl}
+                                  alt={extra.label}
+                                  referrerPolicy="no-referrer"
+                                  className="h-10 w-10 rounded-full object-cover shadow-xs"
+                                />
+                                <span className="mt-1.5 text-[11px] font-bold text-zinc-800">
+                                  {extra.label}
+                                </span>
+                                <span className="text-[9px] text-zinc-400">
+                                  {extra.weight}
+                                </span>
+
+                                {/* Circular Checkmark Badge overlapping bottom border */}
+                                <span
+                                  className={`absolute -bottom-2.5 left-1/2 flex h-5 w-5 -translate-x-1/2 items-center justify-center rounded-full transition-colors ${
+                                    checked
+                                      ? 'bg-[#111318] text-white shadow-xs'
+                                      : 'border border-zinc-300 bg-white text-transparent'
+                                  }`}
+                                >
+                                  <Check className="h-3 w-3 stroke-[3]" />
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* QUANTITY STEPPER + SPLIT BLACK "ADD TO ORDER" PILL */}
+                      <div className="flex flex-wrap items-center gap-4 pt-2">
+                        {/* + 1 - Stepper */}
+                        <div className="inline-flex items-center gap-3 rounded-full bg-[#F4F5F9] px-2 py-1.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setHeroQuantity((q) => Math.min(20, q + 1))
+                            }
+                            aria-label="Aumentar cantidad"
+                            className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-zinc-800 shadow-2xs transition-colors hover:bg-zinc-200"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="font-mono-tabular min-w-4 text-center text-sm font-extrabold text-zinc-900">
+                            {heroQuantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setHeroQuantity((q) => Math.max(1, q - 1))
+                            }
+                            aria-label="Disminuir cantidad"
+                            className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-zinc-800 shadow-2xs transition-colors hover:bg-zinc-200"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Split Black Pill Button: "$14.00 | Agregar al pedido" */}
+                        <button
+                          type="button"
+                          onClick={handleAddHeroDishToOrder}
+                          className="inline-flex items-center gap-4 rounded-full bg-[#111318] px-6 py-3 text-xs font-bold text-white shadow-[0_10px_24px_rgba(17,19,24,0.22)] transition-all hover:bg-zinc-800 active:scale-98 sm:text-sm"
+                        >
+                          <span className="font-mono-tabular font-extrabold">
+                            {formatUSD(featuredProduct.price * heroQuantity)}
+                          </span>
+                          <span
+                            aria-hidden="true"
+                            className="h-4 w-px bg-white/25"
+                          />
+                          <span>Agregar al pedido</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. RECOMMENDED PAIRINGS / FULL MENU GRID (Bottom of Left Panel) */}
+                <div className="mt-8 border-t border-zinc-100 pt-5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold tracking-widest text-zinc-400 uppercase">
+                      Acompañamientos Recomendados y Menú ({pairingDishes.length}{' '}
+                      platos)
+                    </span>
                     <button
                       type="button"
                       onClick={() => setShowAllDishes((v) => !v)}
-                      className="group flex items-center gap-2 text-xs font-semibold text-zinc-200 hover:text-white whitespace-nowrap shrink-0"
+                      className="text-xs font-bold text-zinc-600 hover:text-[#E11D2E]"
                     >
-                      <span>{showAllDishes ? 'Ver Menos' : 'Ver Catálogo'}</span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#525257] text-white transition-transform group-hover:translate-x-0.5">
-                        <ChevronRight className="h-4 w-4" />
-                      </span>
+                      {showAllDishes
+                        ? 'Mostrar recomendados (6)'
+                        : `Ver menú completo (${products.length})`}
                     </button>
                   </div>
 
-                  {/* Floating-Image Dish Cards Grid */}
-                  <div className="mt-10 grid grid-cols-2 gap-x-3 gap-y-11 @md:grid-cols-3 @md:gap-x-4 @2xl:grid-cols-4">
-                    {displayedDishes.map((dish, dishIdx) => {
+                  <div className="mt-3.5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {pairingDishes.map((dish) => {
                       const qtyInCart = activeLines
                         .filter((l) => l.product.id === dish.id)
                         .reduce((sum, l) => sum + l.quantity, 0);
-                      return (
-                        <button
-                          key={dish.id}
-                          type="button"
-                          onClick={() => handleAddProductToTicket(dish)}
-                          aria-label={`Facturar ${dish.shortName} ${formatUSD(dish.price)}`}
-                          className={`group relative flex min-w-0 flex-col justify-between rounded-[22px] px-3 pt-12 pb-3 sm:px-3.5 sm:pb-3.5 text-center shadow-lg transition-all duration-150 hover:-translate-y-1 ${
-                            qtyInCart > 0
-                              ? 'bg-[#342B2B] ring-2 ring-[#F04E3E]'
-                              : 'bg-[#2B2B2E] hover:bg-[#333337] hover:ring-1 hover:ring-[#F04E3E]/50'
-                          } ${!showAllDishes && dishIdx >= 4 ? '@2xl:hidden' : ''}`}
-                        >
-                          {/* Badge showing quantity currently in the cart */}
-                          {qtyInCart > 0 && (
-                            <span className="font-mono-tabular absolute top-2.5 right-2.5 z-10 inline-flex items-center justify-center rounded-full bg-[#F04E3E] px-2 py-0.5 text-[11px] font-extrabold text-white shadow-md">
-                              {qtyInCart} en carrito
-                            </span>
-                          )}
 
-                          {/* Floating Circular Food Photo Overlapping Card Top */}
-                          <div className="absolute -top-8 left-1/2 -translate-x-1/2">
-                            <div
-                              className={`h-20 w-20 overflow-hidden rounded-full border-2 bg-[#1C1C1E] shadow-[0_10px_20px_rgba(0,0,0,0.65)] transition-transform duration-200 group-hover:scale-105 ${
-                                qtyInCart > 0
-                                  ? 'border-[#F04E3E]'
-                                  : 'border-[#3E3E42]'
-                              }`}
-                            >
+                      return (
+                        <div
+                          key={dish.id}
+                          className={`group relative flex items-center justify-between gap-3 rounded-[20px] border border-dashed p-3 transition-all ${
+                            qtyInCart > 0
+                              ? 'border-[#E11D2E]/50 bg-red-50/20'
+                              : 'border-zinc-200/90 bg-white hover:border-zinc-300 hover:shadow-sm'
+                          }`}
+                        >
+                          {/* Clicking the photo/title loads this dish into the Hero Configurator */}
+                          <button
+                            type="button"
+                            onClick={() => handleSelectDishForHero(dish)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left focus:outline-none"
+                          >
+                            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-zinc-100 bg-zinc-100 shadow-xs">
                               {!brokenImages[dish.id] ? (
                                 <img
                                   src={dish.imageUrl}
                                   alt={dish.shortName}
                                   referrerPolicy="no-referrer"
                                   onError={() => markImgBroken(dish.id)}
-                                  className="h-full w-full object-cover"
+                                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
                                 />
                               ) : (
-                                <div className="flex h-full w-full items-center justify-center text-xs font-bold text-[#F04E3E]">
+                                <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-[#E11D2E]">
                                   {dish.plu}
                                 </div>
                               )}
                             </div>
-                          </div>
 
-                          <div className="mt-1">
-                            <h3 className="truncate text-sm font-bold text-white group-hover:text-[#F04E3E]">
-                              {dish.shortName}
-                            </h3>
-                            <p className="mt-0.5 text-[10px] text-zinc-400">
-                              Precio Venta ({dish.plu})
-                            </p>
-                            <p className="font-mono-tabular mt-1 text-sm font-extrabold text-white">
-                              {formatUSD(dish.price)}
-                            </p>
-                          </div>
-
-                          <div className="mt-3 flex items-end justify-between border-t border-zinc-700/60 pt-2 text-[10px]">
-                            <span className="inline-flex items-center gap-1 font-bold text-zinc-200">
-                              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                              {dish.rating.toFixed(1)}
-                            </span>
-                            <div className="text-right leading-tight">
-                              <span className="font-mono-tabular block text-zinc-400">
-                                {dish.totalSalesCount}
-                              </span>
-                              <span className="font-bold text-white">
-                                Ventas
-                              </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-extrabold text-zinc-900 group-hover:text-[#E11D2E]">
+                                {dish.shortName}
+                              </p>
+                              <p className="truncate text-[11px] text-zinc-400">
+                                {dish.subtitle}
+                              </p>
+                              <div className="mt-1.5 flex items-center gap-2">
+                                <span className="font-mono-tabular text-xs font-extrabold text-[#E11D2E]">
+                                  {formatUSD(dish.price)}
+                                </span>
+                                {qtyInCart > 0 && (
+                                  <span className="rounded-full bg-[#E11D2E]/10 px-2 py-0.2 text-[10px] font-bold text-[#E11D2E]">
+                                    {qtyInCart} en orden
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        </button>
+                          </button>
+
+                          {/* Direct + Button to add straight to My Order */}
+                          <button
+                            type="button"
+                            onClick={() => handleAddProductToTicket(dish, 1)}
+                            aria-label={`Agregar ${dish.shortName} al pedido`}
+                            title="Agregar directamente al pedido"
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#111318] text-white shadow-xs transition-all hover:scale-105 hover:bg-[#E11D2E]"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
-                </section>
-
+                </div>
               </div>
 
-              {/* RIGHT COLUMN (5 Cols on XL): Perforated Ticket / Cart Card matching image_9001ce6d.png */}
+              {/* ===============================================================
+                  RIGHT WHITE PANEL: "My Order" / "Mi Pedido" Card
+                 =============================================================== */}
               <form
                 id="pos-ticket"
                 onSubmit={handleEmitInvoice}
-                className="relative flex min-w-0 scroll-mt-20 flex-col justify-between overflow-x-hidden rounded-[28px] bg-[#3E3E42] p-5 text-white shadow-2xl lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start"
+                className="flex min-w-0 scroll-mt-20 flex-col justify-between rounded-[26px] bg-white p-5 shadow-[0_4px_24px_rgba(15,23,42,0.03)] sm:p-6 lg:self-start"
               >
-                {/* Top Sub-Card: DELIVERY ADDRESS / DATOS DE FACTURA */}
-                <div className="rounded-[20px] bg-[#66666B] p-4 shadow-inner">
+                <div>
+                  {/* 1. My Order Header */}
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold tracking-wider text-white uppercase">
-                      Cliente y Entrega
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setEditingHeaderDetails((v) => !v)}
-                      className="rounded-full bg-black/25 px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-black/40"
-                    >
-                      {editingHeaderDetails ? 'Listo' : 'Editar Cédula / RUC'}
-                    </button>
+                    <h2 className="text-base font-extrabold text-zinc-900">
+                      Mi Pedido
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-zinc-400">
+                        {ticketItemsCount}{' '}
+                        {ticketItemsCount === 1 ? 'posición' : 'posiciones'}
+                      </span>
+                      {activeLines.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveLines([]);
+                            setBillingError('');
+                          }}
+                          className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold text-zinc-500 hover:bg-red-50 hover:text-[#E11D2E]"
+                        >
+                          Vaciar
+                        </button>
+                      )}
+                    </div>
                   </div>
 
-                  {!editingHeaderDetails ? (
-                    <div className="mt-2.5 space-y-1.5 text-xs text-zinc-100">
-                      <p className="flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5 shrink-0 text-white" />
-                        <span className="truncate">
-                          {channel === 'mostrador'
-                            ? 'Mostrador · Retiro en Caja'
-                            : tableOrAddress ||
-                              (channel === 'mesa'
-                                ? 'Falta el número de mesa'
-                                : 'Falta la dirección de entrega')}
-                        </span>
-                      </p>
-                      <p className="flex items-center gap-2 text-zinc-200">
-                        <User className="h-3.5 w-3.5 shrink-0 text-white" />
-                        <span className="truncate">
-                          {customerName} ({customerTaxId})
-                          {customerPhone ? ` · ${customerPhone}` : ''}
-                        </span>
-                      </p>
+                  {/* 2. Compact SRI Customer & Delivery Channel Bar */}
+                  <div className="mt-3 rounded-2xl border border-zinc-200/80 bg-[#F8F9FC] p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-zinc-800">
+                        <User className="h-3.5 w-3.5 shrink-0 text-[#E11D2E]" />
+                        <span className="truncate">{customerName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingHeaderDetails((v) => !v)}
+                        className="shrink-0 rounded-full bg-white px-2.5 py-0.5 text-[10px] font-bold text-[#E11D2E] shadow-2xs ring-1 ring-zinc-200 hover:bg-red-50"
+                      >
+                        {editingHeaderDetails
+                          ? 'Cerrar datos'
+                          : 'Datos SRI / Mesa'}
+                      </button>
                     </div>
-                  ) : (
-                    /* Inline Customer, ID & Document Type Editor */
-                    <div className="mt-3 space-y-2.5 border-t border-white/15 pt-3 text-xs">
-                      <div className="grid grid-cols-2 gap-1.5 rounded-full bg-black/25 p-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDocType('consumidor_final');
-                            setCustomerName(CONSUMIDOR_FINAL_NAME);
-                            setCustomerTaxId(CONSUMIDOR_FINAL_ID);
-                          }}
-                          className={`rounded-full py-1 text-[11px] font-bold ${
-                            docType === 'consumidor_final'
-                              ? 'bg-white text-zinc-900'
-                              : 'text-zinc-200'
-                          }`}
-                        >
-                          Consumidor Final
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDocType('con_datos');
-                            if (customerTaxId === CONSUMIDOR_FINAL_ID) {
-                              setCustomerName('');
-                              setCustomerTaxId('');
-                            }
-                          }}
-                          className={`rounded-full py-1 text-[11px] font-bold ${
-                            docType === 'con_datos'
-                              ? 'bg-[#F04E3E] text-white'
-                              : 'text-zinc-200'
-                          }`}
-                        >
-                          Factura con Datos
-                        </button>
-                      </div>
 
-                      {docType === 'consumidor_final' ? (
-                        <p className="rounded-lg bg-black/20 px-2.5 py-1.5 text-[11px] text-zinc-200">
-                          Factura a CONSUMIDOR FINAL ({CONSUMIDOR_FINAL_ID}).
-                          Máximo {formatUSD(CONSUMIDOR_FINAL_MAX_TOTAL)} por
-                          factura según el SRI.
-                        </p>
-                      ) : (
-                      <>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label
-                            htmlFor="ticket-id-input"
-                            className="mb-0.5 block text-[10px] font-semibold text-zinc-200"
+                    {/* 3-Way Channel Pills */}
+                    <div className="mt-2.5 grid grid-cols-3 gap-1 rounded-full bg-zinc-200/70 p-1">
+                      {(
+                        [
+                          { id: 'domicilio', label: 'Domicilio' },
+                          { id: 'mesa', label: 'En Salón' },
+                          { id: 'mostrador', label: 'Llevar' },
+                        ] as const
+                      ).map((mode) => {
+                        const active = channel === mode.id;
+                        return (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() => handleChangeChannel(mode.id)}
+                            className={`rounded-full py-1 text-[11px] font-bold transition-all ${
+                              active
+                                ? 'bg-[#111318] text-white shadow-2xs'
+                                : 'text-zinc-600 hover:text-zinc-900'
+                            }`}
                           >
-                            Cédula o RUC
-                          </label>
-                          <input
-                            id="ticket-id-input"
-                            type="text"
-                            inputMode="numeric"
-                            maxLength={13}
-                            value={customerTaxId}
-                            onChange={(e) =>
-                              setCustomerTaxId(e.target.value.replace(/\D/g, ''))
-                            }
-                            placeholder="10 o 13 dígitos"
-                            className="font-mono-tabular w-full rounded-lg bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder-zinc-400 focus:outline-none"
-                          />
-                          {customerTaxId.length >= 10 && (
-                            <p
-                              className={`mt-0.5 text-[10px] font-semibold ${
-                                taxIdCheck.valid ? 'text-[#7CDB80]' : 'text-[#FFB4A8]'
-                              }`}
-                            >
-                              {taxIdCheck.valid
-                                ? taxIdCheck.type === 'ruc'
-                                  ? 'RUC válido'
-                                  : 'Cédula válida'
-                                : taxIdCheck.error}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <label
-                            htmlFor="ticket-name-input"
-                            className="mb-0.5 block text-[10px] font-semibold text-zinc-200"
-                          >
-                            Nombres / Razón Social
-                          </label>
-                          <input
-                            id="ticket-name-input"
-                            type="text"
-                            value={customerName}
-                            onChange={(e) => setCustomerName(e.target.value)}
-                            placeholder="Nombre o Empresa"
-                            className="w-full rounded-lg bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder-zinc-400 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="ticket-email-input"
-                          className="mb-0.5 block text-[10px] font-semibold text-zinc-200"
-                        >
-                          Correo para la factura electrónica
-                        </label>
-                        <input
-                          id="ticket-email-input"
-                          type="email"
-                          value={customerEmail}
-                          onChange={(e) => setCustomerEmail(e.target.value)}
-                          placeholder="cliente@correo.com"
-                          className="w-full rounded-lg bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder-zinc-400 focus:outline-none"
-                        />
-                      </div>
-                      </>
-                      )}
+                            {mode.label}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                      <div className="grid grid-cols-2 gap-2">
+                    {editingHeaderDetails && (
+                      <div className="mt-3 space-y-2.5 border-t border-zinc-200 pt-2.5 text-xs">
+                        <div className="grid grid-cols-2 gap-1 rounded-full bg-zinc-200/70 p-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDocType('consumidor_final');
+                              setCustomerName(CONSUMIDOR_FINAL_NAME);
+                              setCustomerTaxId(CONSUMIDOR_FINAL_ID);
+                            }}
+                            className={`rounded-full py-1 text-[11px] font-bold ${
+                              docType === 'consumidor_final'
+                                ? 'bg-white text-zinc-900 shadow-2xs'
+                                : 'text-zinc-600'
+                            }`}
+                          >
+                            Consumidor Final
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDocType('con_datos');
+                              if (customerTaxId === CONSUMIDOR_FINAL_ID) {
+                                setCustomerName('');
+                                setCustomerTaxId('');
+                              }
+                            }}
+                            className={`rounded-full py-1 text-[11px] font-bold ${
+                              docType === 'con_datos'
+                                ? 'bg-[#E11D2E] text-white shadow-2xs'
+                                : 'text-zinc-600'
+                            }`}
+                          >
+                            Factura con Datos
+                          </button>
+                        </div>
+
+                        {docType === 'con_datos' && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label
+                                htmlFor="ticket-id-input"
+                                className="mb-0.5 block text-[10px] font-bold text-zinc-500"
+                              >
+                                Cédula o RUC
+                              </label>
+                              <input
+                                id="ticket-id-input"
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={13}
+                                value={customerTaxId}
+                                onChange={(e) =>
+                                  setCustomerTaxId(
+                                    e.target.value.replace(/\D/g, '')
+                                  )
+                                }
+                                placeholder="10 o 13 dígitos"
+                                className="font-mono-tabular w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 focus:border-[#E11D2E] focus:outline-none"
+                              />
+                              {customerTaxId.length >= 10 && (
+                                <p
+                                  className={`mt-0.5 text-[10px] font-bold ${
+                                    taxIdCheck.valid
+                                      ? 'text-emerald-600'
+                                      : 'text-[#E11D2E]'
+                                  }`}
+                                >
+                                  {taxIdCheck.valid
+                                    ? taxIdCheck.type === 'ruc'
+                                      ? 'RUC válido'
+                                      : 'Cédula válida'
+                                    : taxIdCheck.error}
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label
+                                htmlFor="ticket-name-input"
+                                className="mb-0.5 block text-[10px] font-bold text-zinc-500"
+                              >
+                                Razón Social
+                              </label>
+                              <input
+                                id="ticket-name-input"
+                                type="text"
+                                value={customerName}
+                                onChange={(e) =>
+                                  setCustomerName(e.target.value)
+                                }
+                                placeholder="Nombre cliente"
+                                className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 focus:border-[#E11D2E] focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        )}
+
                         {channel !== 'mostrador' && (
-                          <div>
-                            <label
-                              htmlFor="ticket-address-input"
-                              className="mb-0.5 block text-[10px] font-semibold text-zinc-200"
-                            >
-                              {channel === 'mesa'
-                                ? 'Número de Mesa'
-                                : 'Dirección de Domicilio'}
-                            </label>
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
                             <input
-                              id="ticket-address-input"
                               type="text"
                               value={tableOrAddress}
-                              onChange={(e) => setTableOrAddress(e.target.value)}
+                              onChange={(e) =>
+                                setTableOrAddress(e.target.value)
+                              }
                               placeholder={
                                 channel === 'mesa'
-                                  ? 'Ej. Mesa 04'
-                                  : 'Ej. Av. 6 de Diciembre N34-120 y Portugal'
+                                  ? 'Ej. Mesa 04 · Salón'
+                                  : 'Dirección de entrega...'
                               }
-                              className="w-full rounded-lg bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder-zinc-400 focus:outline-none"
+                              className="w-full rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs text-zinc-900 focus:border-[#E11D2E] focus:outline-none"
                             />
                           </div>
                         )}
-                        <div>
-                          <label
-                            htmlFor="ticket-phone-input"
-                            className="mb-0.5 block text-[10px] font-semibold text-zinc-200"
-                          >
-                            Teléfono
-                          </label>
-                          <input
-                            id="ticket-phone-input"
-                            type="tel"
-                            value={customerPhone}
-                            onChange={(e) => setCustomerPhone(e.target.value)}
-                            placeholder="Ej. 099 123 4567"
-                            className="font-mono-tabular w-full rounded-lg bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder-zinc-400 focus:outline-none"
-                          />
-                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Cart Header & Order ID */}
-                <div className="mt-5 flex shrink-0 items-center justify-between px-1">
-                  <div className="flex items-center gap-2">
-                    <ShoppingCart className="h-4 w-4 text-[#F04E3E]" />
-                    <span className="text-sm font-bold text-white">
-                      Carrito / Factura
-                    </span>
-                    <span className="font-mono-tabular rounded-full bg-[#F04E3E] px-2 py-0.5 text-[11px] font-extrabold text-white">
-                      {ticketItemsCount}{' '}
-                      {ticketItemsCount === 1 ? 'ítem' : 'ítems'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {activeLines.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveLines([]);
-                          setBillingError('');
-                        }}
-                        className="rounded-full bg-black/25 px-2.5 py-0.5 text-[10px] font-semibold text-zinc-300 hover:bg-black/40 hover:text-white"
-                      >
-                        Vaciar
-                      </button>
                     )}
-                    <span className="font-mono-tabular text-xs text-zinc-300">
-                      N° {nextFolioCode}
-                    </span>
                   </div>
-                </div>
 
-                {/* 3-Way Pill Segmented Control: Delivery | Dine In | Takeaway */}
-                <div className="mt-3.5 grid shrink-0 grid-cols-3 items-center rounded-full border border-zinc-400/40 bg-[#323236] p-1">
-                  {(
-                    [
-                      { id: 'domicilio', label: 'Domicilio' },
-                      { id: 'mesa', label: 'En Salón' },
-                      { id: 'mostrador', label: 'Para Llevar' },
-                    ] as const
-                  ).map((mode) => {
-                    const active = channel === mode.id;
-                    return (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        onClick={() => handleChangeChannel(mode.id)}
-                        className={`rounded-full py-1.5 text-xs font-semibold transition-all whitespace-nowrap shrink-0 ${
-                          active
-                            ? 'bg-gradient-to-r from-[#E53935] to-[#F05545] text-white shadow-md'
-                            : 'text-zinc-300 hover:text-white'
-                        }`}
-                      >
-                        {mode.label}
-                      </button>
-                    );
-                  })}
-                </div>
+                  {/* 3. Itemized Order Cards (Dashed border cards matching Dishly "My Order") */}
+                  <div className="mt-4 shrink-0 space-y-2.5">
+                    {activeLines.length === 0 ? (
+                      <div className="rounded-[20px] border border-dashed border-zinc-200 bg-[#FAFBFD] py-8 text-center text-xs text-zinc-400">
+                        Tu pedido está vacío. Selecciona un plato para comenzar.
+                      </div>
+                    ) : (
+                      activeLines.map((line) => (
+                        <div
+                          key={line.lineId}
+                          className="flex items-center gap-3 rounded-[20px] border border-dashed border-zinc-200/90 bg-white p-2.5 shadow-2xs transition-colors hover:border-zinc-300"
+                        >
+                          {/* Circular Dish Photo */}
+                          {!brokenImages[line.product.id] ? (
+                            <img
+                              src={line.product.imageUrl}
+                              alt={line.product.shortName}
+                              referrerPolicy="no-referrer"
+                              onError={() => markImgBroken(line.product.id)}
+                              className="h-14 w-14 shrink-0 rounded-full object-cover shadow-xs"
+                            />
+                          ) : (
+                            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-red-50 text-[10px] font-bold text-[#E11D2E]">
+                              {line.product.plu}
+                            </div>
+                          )}
 
-                {/* Itemized Cart List (shrink-0 prevents Flexbox from collapsing cart items on short screens) */}
-                <div className="mt-4 shrink-0 space-y-2.5 rounded-2xl bg-black/20 p-3">
-                  {activeLines.length === 0 ? (
-                    <div className="py-6 text-center text-xs text-zinc-300">
-                      Selecciona platos del panel central para agregarlos al
-                      carrito de facturación.
-                    </div>
-                  ) : (
-                    activeLines.map((line) => (
-                      <div
-                        key={line.lineId}
-                        className="flex items-center justify-between gap-3 rounded-xl bg-[#2B2B2E]/90 px-3 py-2.5 shadow-sm"
-                      >
-                        {/* Dish Circular Thumbnail with fallback */}
-                        {!brokenImages[line.product.id] ? (
-                          <img
-                            src={line.product.imageUrl}
-                            alt={line.product.shortName}
-                            referrerPolicy="no-referrer"
-                            onError={() => markImgBroken(line.product.id)}
-                            className="h-11 w-11 shrink-0 rounded-full object-cover shadow-md"
-                          />
-                        ) : (
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#1C1C1E] text-[10px] font-bold text-[#F04E3E]">
-                            {line.product.plu}
-                          </div>
-                        )}
-
-                        {/* Title, Subtitle & Circular +/- Steppers */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-xs font-bold text-white">
-                              {line.product.shortName}
+                          {/* Dish Info + Red Price & Stepper Row */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-1">
+                              <p className="truncate text-xs font-extrabold text-zinc-900">
+                                {line.product.shortName}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => handleCycleLineCut(line.lineId)}
+                                title="Cambiar corte"
+                                className="text-zinc-400 hover:text-zinc-700"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <p className="truncate text-[11px] text-zinc-400">
+                              {line.cutNote}
                             </p>
-                            <span className="font-mono-tabular shrink-0 text-xs font-extrabold text-[#4CAF50]">
-                              {formatUSD(line.subtotal)}
-                            </span>
-                          </div>
-                          <p className="truncate text-[11px] text-zinc-300">
-                            {line.cutNote} · {formatUSD(line.unitPrice)} c/u
-                          </p>
 
-                          <div className="mt-1.5 flex items-center gap-2.5">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateLineQuantity(line.lineId, -1)
-                              }
-                              aria-label={`Restar ${line.product.shortName}`}
-                              className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-300/60 text-white hover:bg-white/15"
-                            >
-                              <Minus className="h-2.5 w-2.5" />
-                            </button>
-                            <span className="font-mono-tabular text-xs font-extrabold text-white">
-                              {line.quantity}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateLineQuantity(line.lineId, 1)
-                              }
-                              aria-label={`Sumar ${line.product.shortName}`}
-                              className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-300/60 text-white hover:bg-white/15"
-                            >
-                              <Plus className="h-2.5 w-2.5" />
-                            </button>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <span className="font-mono-tabular text-xs font-extrabold text-[#E11D2E]">
+                                {formatUSD(line.subtotal)}
+                              </span>
+
+                              {/* Dishly + 1 - Capsule Stepper */}
+                              <div className="inline-flex items-center gap-2 rounded-full bg-[#F4F5F9] px-1.5 py-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateLineQuantity(line.lineId, 1)
+                                  }
+                                  aria-label={`Sumar ${line.product.shortName}`}
+                                  className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-700 shadow-2xs hover:bg-zinc-200"
+                                >
+                                  <Plus className="h-2.5 w-2.5" />
+                                </button>
+                                <span className="font-mono-tabular min-w-3 text-center text-xs font-extrabold text-zinc-900">
+                                  {line.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateLineQuantity(line.lineId, -1)
+                                  }
+                                  aria-label={`Restar ${line.product.shortName}`}
+                                  className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-zinc-700 shadow-2xs hover:bg-zinc-200"
+                                >
+                                  <Minus className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
-
-                        {/* White Pill Edit Button (cycles cut note) */}
-                        <button
-                          type="button"
-                          onClick={() => handleCycleLineCut(line.lineId)}
-                          aria-label={`Cambiar corte de ${line.product.shortName}`}
-                          title="Cambiar tipo de corte (8 Presas / 4 Cuartos / Entero / Deshuesado)"
-                          className="flex h-7 w-9 shrink-0 items-center justify-center rounded-full bg-white text-zinc-900 shadow-sm transition-transform hover:scale-105"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
 
-                {/* PERFORATED TICKET NOTCH DIVIDER */}
-                <div className="relative my-4 flex items-center justify-between">
-                  <span
-                    aria-hidden="true"
-                    className="-ml-8 h-7 w-7 shrink-0 rounded-full bg-[#1C1C1E]"
-                  />
-                  <div className="w-full border-t-2 border-dashed border-[#242427]" />
-                  <span
-                    aria-hidden="true"
-                    className="-mr-8 h-7 w-7 shrink-0 rounded-full bg-[#1C1C1E]"
-                  />
-                </div>
-
-                {/* Promotion Code Pill Row */}
-                <div className="flex items-center justify-between rounded-full bg-[#4E4E53] py-1.5 pr-1.5 pl-4">
-                  <span className="text-xs font-medium text-zinc-200">
-                    Código Promoción
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCyclePromoDiscount}
-                    className="rounded-full bg-[#1C1C1E] px-5 py-1.5 text-xs font-extrabold tracking-wider text-white transition-colors hover:bg-black"
-                  >
-                    {promoCodeLabel}
-                  </button>
-                </div>
-
-                {/* Compact Payment Method & Cash Change Bar */}
-                <div className="mt-3 rounded-2xl bg-black/20 p-3 text-xs">
-                  <div className="flex items-center justify-between gap-1.5">
-                    {(
-                      [
-                        { id: 'efectivo', label: 'Efectivo' },
-                        { id: 'tarjeta', label: 'Tarjeta' },
-                        { id: 'transferencia', label: 'Transferencia' },
-                      ] as const
-                    ).map((pm) => (
-                      <button
-                        key={pm.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(pm.id)}
-                        className={`flex-1 rounded-full py-1 text-[11px] font-semibold transition-colors ${
-                          paymentMethod === pm.id
-                            ? 'bg-white text-zinc-900'
-                            : 'text-zinc-300 hover:text-white'
-                        }`}
-                      >
-                        {pm.label}
-                      </button>
-                    ))}
+                {/* 4. Bottom Order Summary, Promo Code, Payment & Confirm Button */}
+                <div className="mt-5">
+                  {/* PROMOCODE Row with Dashed Dividers */}
+                  <div className="flex items-center justify-between border-y border-dashed border-zinc-200 py-3">
+                    <span className="text-[11px] font-bold tracking-wider text-zinc-400 uppercase">
+                      Promocode
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCyclePromoDiscount}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-[#F4F5F9] px-3 py-1 text-xs font-bold text-zinc-900 transition-colors hover:bg-zinc-200"
+                    >
+                      <Tag className="h-3 w-3 text-[#111318]" />
+                      <span>{promoCodeLabel}</span>
+                      <span className="text-zinc-400">×</span>
+                    </button>
                   </div>
 
-                  {paymentMethod === 'efectivo' && (
-                    <div className="mt-2.5 flex items-center justify-between border-t border-white/10 pt-2">
-                      <div className="flex items-center gap-1.5">
-                        <label
-                          htmlFor="pos-cash-input"
-                          className="text-[11px] text-zinc-300"
-                        >
-                          Recibido:
-                        </label>
-                        <input
-                          id="pos-cash-input"
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={cashReceivedValue}
-                          onChange={(e) =>
-                            setCashReceivedInput(
-                              Math.max(0, Number(e.target.value) || 0)
-                            )
-                          }
-                          className="font-mono-tabular w-24 rounded-full bg-black/30 px-2.5 py-0.5 text-right text-xs font-bold text-white"
-                        />
-                      </div>
-                      <span className="font-mono-tabular text-[11px] font-bold text-[#4CAF50]">
-                        Vuelto:{' '}
-                        {cashChange.isSufficient
-                          ? formatUSD(cashChange.changeDue)
-                          : 'Insuficiente'}
+                  {/* Totals Breakdown */}
+                  <div className="mt-4 space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold tracking-wider text-zinc-400 uppercase">
+                        Descuento
+                      </span>
+                      <span className="font-mono-tabular font-bold text-zinc-700">
+                        -{discountPercent}% ({formatUSD(currentTotals.discountAmount)})
                       </span>
                     </div>
-                  )}
-                </div>
 
-                {/* Sub Total, Delivery Charge & TOTAL */}
-                <div className="mt-4 space-y-1.5 px-1 text-xs">
-                  <div className="flex justify-between text-zinc-200">
-                    <span>
-                      Subtotal (Base {formatUSD(currentTotals.netBase)} + IVA 15%)
-                    </span>
-                    <span className="font-mono-tabular font-semibold text-white">
-                      {formatUSD(
-                        currentTotals.grossSubtotal - currentTotals.discountAmount
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-zinc-200">
-                    <span>Recargo Domicilio</span>
-                    <span className="font-mono-tabular font-semibold text-white">
-                      {formatUSD(currentTotals.deliveryCharge)}
-                    </span>
-                  </div>
-
-                  <div className="my-2 border-t border-zinc-500/40 pt-2.5">
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-sm font-extrabold tracking-wide text-white uppercase">
-                        TOTAL
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold tracking-wider text-zinc-400 uppercase">
+                        Domicilio
                       </span>
-                      <span className="font-mono-tabular text-lg font-extrabold text-white">
+                      <span className="font-mono-tabular font-bold text-zinc-700">
+                        {currentTotals.deliveryCharge === 0
+                          ? 'GRATIS'
+                          : formatUSD(currentTotals.deliveryCharge)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold tracking-wider text-zinc-400 uppercase">
+                        Base + IVA (15%)
+                      </span>
+                      <span className="font-mono-tabular text-[11px] font-medium text-zinc-500">
+                        {formatUSD(currentTotals.netBase)} +{' '}
+                        {formatUSD(currentTotals.ivaTax)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline justify-between pt-1">
+                      <span className="text-xs font-extrabold tracking-wider text-zinc-900 uppercase">
+                        Total
+                      </span>
+                      <span className="font-mono-tabular text-lg font-extrabold text-zinc-900">
                         {formatUSD(currentTotals.grandTotal)}
                       </span>
                     </div>
                   </div>
-                </div>
 
-                {billingError && (
-                  <div className="mt-2 flex items-center gap-2 rounded-xl bg-[#F04E3E]/20 px-3 py-2 text-xs font-semibold text-white">
-                    <AlertCircle className="h-4 w-4 shrink-0 text-[#F04E3E]" />
-                    <span>{billingError}</span>
-                  </div>
-                )}
-
-                {/* Confirm Order Primary Dark Pill Button */}
-                <button
-                  type="submit"
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-b from-[#2C2C30] to-[#151517] py-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(0,0,0,0.5)] transition-all hover:from-[#35353A] active:scale-99"
-                >
-                  <Printer className="h-4 w-4 text-[#F04E3E]" />
-                  <span>Confirmar y Emitir Factura</span>
-                </button>
-              </form>
-
-                {/* 4. Order Reports Section (Recent Invoices Ledger matching bottom table) */}
-                <section
-                  aria-labelledby="pos-order-reports-heading"
-                  className="@container min-w-0 lg:col-start-1 lg:row-start-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2
-                        id="pos-order-reports-heading"
-                        className="text-lg font-bold tracking-tight text-white"
-                      >
-                        Reporte de Facturas
-                      </h2>
-                      <p className="mt-0.5 text-xs text-zinc-400">
-                        <span className="font-semibold text-[#F04E3E]">
-                          Turno Activo ({invoices.length} facturas)
-                        </span>{' '}
-                        · Haz clic en el estado para ver o imprimir el comprobante 80mm
-                      </p>
+                  {/* Payment Method Selector */}
+                  <div className="mt-3.5 rounded-2xl bg-[#F4F5F9] p-2.5 text-xs">
+                    <div className="grid grid-cols-3 gap-1">
+                      {(
+                        [
+                          { id: 'efectivo', label: 'Efectivo' },
+                          { id: 'tarjeta', label: 'Tarjeta' },
+                          { id: 'transferencia', label: 'Transf.' },
+                        ] as const
+                      ).map((pm) => (
+                        <button
+                          key={pm.id}
+                          type="button"
+                          onClick={() => setPaymentMethod(pm.id)}
+                          className={`rounded-full py-1 text-[11px] font-bold transition-all ${
+                            paymentMethod === pm.id
+                              ? 'bg-white text-zinc-900 shadow-2xs'
+                              : 'text-zinc-500 hover:text-zinc-900'
+                          }`}
+                        >
+                          {pm.label}
+                        </button>
+                      ))}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => setActiveModule('facturas')}
-                      className="group flex items-center gap-2 text-xs font-semibold text-zinc-200 hover:text-white whitespace-nowrap shrink-0"
-                    >
-                      <span>Ver Libro</span>
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#525257] text-white transition-transform group-hover:translate-x-0.5">
-                        <ChevronRight className="h-4 w-4" />
-                      </span>
-                    </button>
-                  </div>
-
-                  {/* Table header (only when the column is wide) */}
-                  <div className="mt-4 hidden grid-cols-12 items-center gap-3 rounded-full bg-[#2E2E32] px-5 py-2.5 text-xs font-semibold text-zinc-300 @2xl:grid">
-                    <div className="col-span-3">Cliente</div>
-                    <div className="col-span-3">N° Factura / ID</div>
-                    <div className="col-span-3">Dirección / Mesa</div>
-                    <div className="col-span-1 text-right">Monto</div>
-                    <div className="col-span-2 text-right">Estado</div>
-                  </div>
-
-                  {/* Invoice Rows */}
-                  <div className="mt-3 space-y-2">
-                    {invoices.slice(0, 4).map((inv, idx) => {
-                      const avatar = (
-                        <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${
-                            idx % 2 === 0
-                              ? 'bg-gradient-to-br from-amber-400 to-orange-600'
-                              : 'bg-gradient-to-br from-sky-500 to-indigo-600'
-                          }`}
-                        >
-                          {inv.customerName.slice(0, 2).toUpperCase()}
+                    {paymentMethod === 'efectivo' && (
+                      <div className="mt-2 flex items-center justify-between border-t border-zinc-200/80 pt-2">
+                        <div className="flex items-center gap-1.5">
+                          <label
+                            htmlFor="pos-cash-input"
+                            className="text-[11px] font-medium text-zinc-500"
+                          >
+                            Recibido:
+                          </label>
+                          <input
+                            id="pos-cash-input"
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={cashReceivedValue}
+                            onChange={(e) =>
+                              setCashReceivedInput(
+                                Math.max(0, Number(e.target.value) || 0)
+                              )
+                            }
+                            className="font-mono-tabular w-20 rounded-full border border-zinc-200 bg-white px-2.5 py-0.5 text-right text-xs font-bold text-zinc-900"
+                          />
                         </div>
-                      );
-                      const statusButton = (
-                        <button
-                          type="button"
-                          onClick={() => setInspectingInvoice(inv)}
-                          aria-label={`Ver comprobante ${inv.folio}`}
-                          className={`rounded-full px-3 py-1 text-[11px] font-bold whitespace-nowrap text-white shadow-sm transition-transform hover:scale-105 ${
-                            inv.status === 'emitida' ? 'bg-[#4CAF50]' : 'bg-[#D99B26]'
-                          }`}
-                        >
-                          {inv.status === 'emitida' ? 'Emitida' : 'Anulada'}
-                        </button>
-                      );
-                      return (
-                        <div
-                          key={inv.id}
-                          className="rounded-2xl bg-[#242427] px-4 py-3 transition-colors hover:bg-[#2B2B2E] @2xl:py-2.5"
-                        >
-                          {/* Compact card */}
-                          <div className="flex items-center gap-3 @2xl:hidden">
-                            {avatar}
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-semibold text-white">
-                                {inv.customerName}
-                              </p>
-                              <p className="font-mono-tabular truncate text-[11px] text-zinc-400">
-                                {inv.folio}
-                              </p>
-                              <p className="truncate text-[11px] text-zinc-500">
-                                {inv.tableOrAddress}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 flex-col items-end gap-1.5">
-                              <span className="font-mono-tabular text-sm font-bold text-white">
-                                {formatUSD(inv.totals.grandTotal)}
-                              </span>
-                              {statusButton}
-                            </div>
-                          </div>
-
-                          {/* Table row */}
-                          <div className="hidden grid-cols-12 items-center gap-3 @2xl:grid">
-                            <div className="col-span-3 flex min-w-0 items-center gap-2.5">
-                              {avatar}
-                              <span className="truncate text-xs font-semibold text-white">
-                                {inv.customerName}
-                              </span>
-                            </div>
-                            <div className="font-mono-tabular col-span-3 min-w-0 text-[11px]">
-                              <p className="truncate font-bold text-white">{inv.folio}</p>
-                              <p className="truncate text-zinc-400">{inv.customerTaxId}</p>
-                            </div>
-                            <div className="col-span-3 truncate text-[11px] text-zinc-300">
-                              {inv.tableOrAddress}
-                            </div>
-                            <div className="font-mono-tabular col-span-1 text-right text-xs font-bold text-white">
-                              {formatUSD(inv.totals.grandTotal)}
-                            </div>
-                            <div className="col-span-2 flex justify-end">{statusButton}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        <span className="font-mono-tabular text-[11px] font-bold text-emerald-600">
+                          Vuelto:{' '}
+                          {cashChange.isSufficient
+                            ? formatUSD(cashChange.changeDue)
+                            : 'Insuficiente'}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                </section>
+
+                  {billingError && (
+                    <div className="mt-2.5 flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-[#E11D2E]">
+                      <AlertCircle className="h-4 w-4 shrink-0 text-[#E11D2E]" />
+                      <span>{billingError}</span>
+                    </div>
+                  )}
+
+                  {/* Primary Red Pill CTA Button ("Confirm Order") */}
+                  <button
+                    type="submit"
+                    className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#E11D2E] py-3.5 text-sm font-bold text-white shadow-[0_10px_25px_rgba(225,29,46,0.3)] transition-all hover:bg-[#C81625] active:scale-99"
+                  >
+                    <Printer className="h-4 w-4" />
+                    <span>Confirmar Pedido ({ nextFolioCode.slice(-4) })</span>
+                  </button>
+                </div>
+              </form>
             </div>
           )}
 
@@ -1620,8 +1558,8 @@ export default function App() {
 
         {/* MOBILE / TABLET BOTTOM NAVIGATION */}
         <nav
-          aria-label="Navegación del sistema"
-          className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/10 bg-[#202022]/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
+          aria-label="Navegación móvil"
+          className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden"
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -1632,16 +1570,18 @@ export default function App() {
                 type="button"
                 onClick={() => setActiveModule(item.id)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`flex min-w-0 flex-col items-center gap-1 px-0.5 py-2 text-[10px] sm:text-[11px] font-semibold transition-colors ${
-                  isActive ? 'text-[#F04E3E]' : 'text-zinc-400 hover:text-zinc-200'
+                className={`flex min-w-0 flex-col items-center gap-1 px-0.5 py-2 text-[10px] font-bold transition-colors sm:text-[11px] ${
+                  isActive
+                    ? 'text-[#E11D2E]'
+                    : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
                 <span
-                  className={`flex h-8 w-10 sm:w-12 items-center justify-center rounded-full transition-colors ${
-                    isActive ? 'bg-[#F04E3E]/15' : ''
+                  className={`flex h-7 w-10 items-center justify-center rounded-full transition-colors ${
+                    isActive ? 'bg-red-50' : ''
                   }`}
                 >
-                  <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                  <Icon className="h-4 w-4" />
                 </span>
                 <span className="max-w-full truncate">{item.label}</span>
               </button>
@@ -1650,21 +1590,24 @@ export default function App() {
         </nav>
 
         {/* MOBILE / TABLET quick access to the current order */}
-        {activeModule === 'facturacion' && ticketItemsCount > 0 && !ticketInView && (
-          <button
-            type="button"
-            onClick={scrollToTicket}
-            className="fixed inset-x-4 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full bg-gradient-to-r from-[#E53935] to-[#F05545] py-2.5 pr-2.5 pl-5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(229,57,53,0.45)] lg:hidden"
-          >
-            <span className="flex items-center gap-2">
-              <ShoppingCart className="h-4 w-4" />
-              Ver pedido · {ticketItemsCount} {ticketItemsCount === 1 ? 'ítem' : 'ítems'}
-            </span>
-            <span className="font-mono-tabular rounded-full bg-black/20 px-3 py-1">
-              {formatUSD(currentTotals.grandTotal)}
-            </span>
-          </button>
-        )}
+        {activeModule === 'facturacion' &&
+          ticketItemsCount > 0 &&
+          !ticketInView && (
+            <button
+              type="button"
+              onClick={scrollToTicket}
+              className="fixed inset-x-4 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-30 mx-auto flex max-w-md items-center justify-between gap-3 rounded-full bg-[#E11D2E] py-2.5 pr-2.5 pl-5 text-sm font-bold text-white shadow-[0_12px_30px_rgba(225,29,46,0.4)] lg:hidden"
+            >
+              <span className="flex items-center gap-2">
+                <ShoppingBag className="h-4 w-4" />
+                Ver pedido · {ticketItemsCount}{' '}
+                {ticketItemsCount === 1 ? 'ítem' : 'ítems'}
+              </span>
+              <span className="font-mono-tabular rounded-full bg-black/20 px-3 py-1">
+                {formatUSD(currentTotals.grandTotal)}
+              </span>
+            </button>
+          )}
       </div>
 
       {/* 80mm Thermal Receipt & Kitchen Comanda Modal */}

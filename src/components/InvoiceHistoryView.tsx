@@ -22,10 +22,14 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
   onGoToBilling,
 }) => {
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [docFilter, setDocFilter] = useState<'todos' | 'consumidor_final' | 'con_datos' | 'anulada'>('todos');
+  const [docFilter, setDocFilter] = useState<
+    'todos' | 'consumidor_final' | 'con_datos' | 'anulada'
+  >('todos');
   const [payFilter, setPayFilter] = useState<'todos' | PaymentMethod>('todos');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
-  const [cancelReason, setCancelReason] = useState<string>('Error de digitación en cajero');
+  const [cancelReason, setCancelReason] = useState<string>(
+    'Error de digitación en cajero'
+  );
 
   const filtered = invoices.filter((inv) => {
     const q = searchQuery.trim().toLowerCase();
@@ -49,7 +53,10 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
   });
 
   const activeFiltered = filtered.filter((i) => i.status === 'emitida');
-  const totalBase = activeFiltered.reduce((sum, i) => sum + i.totals.netBase, 0);
+  const totalBase = activeFiltered.reduce(
+    (sum, i) => sum + i.totals.netBase,
+    0
+  );
   const totalTax = activeFiltered.reduce((sum, i) => sum + i.totals.ivaTax, 0);
   const totalFacturado = activeFiltered.reduce(
     (sum, i) => sum + i.totals.grandTotal,
@@ -66,14 +73,14 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
   };
 
   return (
-    <div className="@container space-y-6 text-zinc-100">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="@container space-y-5 text-zinc-900">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-[24px] bg-white p-5 shadow-[0_4px_24px_rgba(15,23,42,0.03)]">
         <div>
-          <h2 className="text-xl font-bold text-white">
+          <h2 className="text-lg font-extrabold text-zinc-900 sm:text-xl">
             Libro de Facturas y Reportes de Venta
           </h2>
-          <p className="text-xs text-zinc-400">
-            <span className="font-semibold text-[#F04E3E]">
+          <p className="text-xs text-zinc-500">
+            <span className="font-bold text-[#E11D2E]">
               {activeFiltered.length} Facturas Activas
             </span>{' '}
             · Facturas electrónicas SRI, Consumidor Final y Notas de Crédito
@@ -82,42 +89,48 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
         <button
           type="button"
           onClick={onGoToBilling}
-          className="rounded-full bg-[#2B2B2E] px-4 py-2 text-xs font-semibold text-zinc-200 transition-colors hover:bg-[#38383C]"
+          className="rounded-full bg-[#111318] px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-zinc-800"
         >
-          ← Volver a Facturación
+          ← Volver a Platos
         </button>
       </div>
 
       {/* KPI Summary Row */}
-      <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4 @3xl:gap-4">
-        <div className="rounded-2xl bg-[#2B2B2E] p-4">
-          <span className="text-xs text-zinc-400">Facturas Activas</span>
-          <p className="font-mono-tabular mt-1 text-lg font-bold @lg:text-2xl text-white">
+      <div className="grid grid-cols-2 gap-3.5 @3xl:grid-cols-4">
+        <div className="rounded-[22px] bg-white p-4 shadow-[0_4px_20px_rgba(15,23,42,0.03)]">
+          <span className="text-xs font-semibold text-zinc-400">
+            Facturas Activas
+          </span>
+          <p className="font-mono-tabular mt-1 text-lg font-extrabold text-zinc-900 @lg:text-2xl">
             {activeFiltered.length} docs
           </p>
         </div>
-        <div className="rounded-2xl bg-[#2B2B2E] p-4">
-          <span className="text-xs text-zinc-400">Subtotal 15% Acumulado</span>
-          <p className="font-mono-tabular mt-1 text-lg font-bold @lg:text-2xl text-white">
+        <div className="rounded-[22px] bg-white p-4 shadow-[0_4px_20px_rgba(15,23,42,0.03)]">
+          <span className="text-xs font-semibold text-zinc-400">
+            Subtotal 15% Acumulado
+          </span>
+          <p className="font-mono-tabular mt-1 text-lg font-extrabold text-zinc-900 @lg:text-2xl">
             {formatUSD(totalBase)}
           </p>
         </div>
-        <div className="rounded-2xl bg-[#2B2B2E] p-4">
-          <span className="text-xs text-zinc-400">IVA (15%)</span>
-          <p className="font-mono-tabular mt-1 text-lg font-bold @lg:text-2xl text-amber-400">
+        <div className="rounded-[22px] bg-white p-4 shadow-[0_4px_20px_rgba(15,23,42,0.03)]">
+          <span className="text-xs font-semibold text-zinc-400">IVA (15%)</span>
+          <p className="font-mono-tabular mt-1 text-lg font-extrabold text-amber-600 @lg:text-2xl">
             {formatUSD(totalTax)}
           </p>
         </div>
-        <div className="rounded-2xl bg-[#2B2B2E] p-4">
-          <span className="text-xs text-zinc-400">Total Neto Facturado</span>
-          <p className="font-mono-tabular mt-1 text-lg font-bold @lg:text-2xl text-[#4CAF50]">
+        <div className="rounded-[22px] bg-white p-4 shadow-[0_4px_20px_rgba(15,23,42,0.03)]">
+          <span className="text-xs font-semibold text-zinc-400">
+            Total Neto Facturado
+          </span>
+          <p className="font-mono-tabular mt-1 text-lg font-extrabold text-[#E11D2E] @lg:text-2xl">
             {formatUSD(totalFacturado)}
           </p>
         </div>
       </div>
 
       {/* Filter & Search Toolbar */}
-      <div className="flex flex-col justify-between gap-4 rounded-2xl bg-[#2B2B2E] p-4 lg:flex-row lg:items-center">
+      <div className="flex flex-col justify-between gap-3 rounded-[22px] bg-white p-4 shadow-[0_4px_20px_rgba(15,23,42,0.03)] lg:flex-row lg:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
@@ -126,12 +139,12 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
             onChange={(e) => setSearchQuery(e.target.value)}
             aria-label="Buscar por número de factura, cédula, RUC o cliente"
             placeholder="Buscar N° (001-001-000001041), cédula, RUC o razón social..."
-            className="w-full rounded-full border border-zinc-700 bg-[#18181A] py-2 pr-4 pl-10 text-xs text-white placeholder-zinc-500 focus:border-[#F04E3E] focus:outline-none"
+            className="w-full rounded-full border border-zinc-200 bg-[#F8F9FC] py-2 pr-4 pl-10 text-xs text-zinc-900 placeholder-zinc-400 focus:border-[#E11D2E] focus:outline-none"
           />
         </div>
 
-        <div className="flex min-w-0 flex-col gap-3 @lg:flex-row @lg:flex-wrap @lg:items-center">
-          <div className="no-scrollbar flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-[#18181A] p-1">
+        <div className="flex min-w-0 flex-col gap-2.5 @lg:flex-row @lg:flex-wrap @lg:items-center">
+          <div className="no-scrollbar flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-[#F4F5F9] p-1">
             {(
               [
                 { id: 'todos', label: 'Todos' },
@@ -144,10 +157,10 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setDocFilter(tab.id)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors whitespace-nowrap shrink-0 ${
                   docFilter === tab.id
-                    ? 'bg-gradient-to-r from-[#E53935] to-[#F05545] font-semibold text-white'
-                    : 'text-zinc-400 hover:text-white'
+                    ? 'bg-[#111318] text-white shadow-2xs'
+                    : 'text-zinc-500 hover:text-zinc-900'
                 }`}
               >
                 {tab.label}
@@ -158,8 +171,10 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
           <select
             aria-label="Filtrar por medio de pago"
             value={payFilter}
-            onChange={(e) => setPayFilter(e.target.value as 'todos' | PaymentMethod)}
-            className="rounded-full border border-zinc-700 bg-[#18181A] px-3.5 py-1.5 text-xs font-medium text-zinc-200 focus:border-[#F04E3E] focus:outline-none"
+            onChange={(e) =>
+              setPayFilter(e.target.value as 'todos' | PaymentMethod)
+            }
+            className="rounded-full border border-zinc-200 bg-[#F8F9FC] px-3.5 py-1.5 text-xs font-bold text-zinc-700 focus:border-[#E11D2E] focus:outline-none"
           >
             <option value="todos">Todos los Medios de Pago</option>
             <option value="efectivo">Efectivo</option>
@@ -169,10 +184,9 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
         </div>
       </div>
 
-      {/* Order Reports Style Table */}
-      <div className="space-y-2.5">
-        {/* Pill Header Bar matching reference */}
-        <div className="hidden grid-cols-12 items-center gap-3 rounded-full bg-[#2B2B2E] px-6 py-3 text-xs font-medium text-zinc-300 @3xl:grid">
+      {/* Invoices List */}
+      <div className="rounded-[24px] bg-white p-4 sm:p-5 shadow-[0_4px_24px_rgba(15,23,42,0.03)] space-y-2.5">
+        <div className="hidden grid-cols-12 items-center gap-3 rounded-full bg-[#F4F5F9] px-5 py-2.5 text-[11px] font-bold tracking-wider text-zinc-400 uppercase @3xl:grid">
           <div className="col-span-3">Cliente / Adquirente</div>
           <div className="col-span-2">N° Factura / ID</div>
           <div className="col-span-3">Dirección / Mesa</div>
@@ -181,9 +195,9 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
         </div>
 
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-[#2B2B2E] p-12 text-center">
-            <FileText className="mb-2 h-8 w-8 text-zinc-500" />
-            <p className="text-sm font-bold text-white">
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 p-12 text-center">
+            <FileText className="mb-2 h-8 w-8 text-zinc-400" />
+            <p className="text-sm font-bold text-zinc-700">
               No se encontraron facturas con los filtros seleccionados
             </p>
           </div>
@@ -191,60 +205,59 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
           filtered.map((inv) => (
             <div
               key={inv.id}
-              className="rounded-2xl bg-[#242427] px-5 py-3.5 transition-colors hover:bg-[#2B2B2E]"
+              className="rounded-[20px] border border-dashed border-zinc-200/90 bg-[#FCFDFE] px-4 py-3.5 transition-all hover:border-zinc-300 hover:shadow-xs"
             >
               <div className="grid grid-cols-2 items-center gap-x-3 gap-y-2 @3xl:grid-cols-12">
-                {/* Customer with circular avatar */}
                 <div className="col-span-2 flex min-w-0 items-center gap-3 @3xl:col-span-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#F04E3E] to-[#B71C1C] text-xs font-bold text-white">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#111318] text-xs font-extrabold text-white">
                     {inv.customerName.slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-xs font-bold text-white">
+                    <p className="truncate text-xs font-extrabold text-zinc-900">
                       {inv.customerName}
                     </p>
                     <p className="text-[11px] text-zinc-400">
-                      {PAYMENT_METHOD_LABELS[inv.paymentMethod]} · {inv.issuedDate} {inv.createdAt}
+                      {PAYMENT_METHOD_LABELS[inv.paymentMethod]} ·{' '}
+                      {inv.issuedDate} {inv.createdAt}
                     </p>
                   </div>
                 </div>
 
-                {/* Order / Invoice Number */}
                 <div className="font-mono-tabular min-w-0 text-xs @3xl:col-span-2">
-                  <span className="font-bold text-zinc-200">{inv.folio}</span>
+                  <span className="font-bold text-zinc-800">{inv.folio}</span>
                   <span className="block text-[11px] text-zinc-400">
                     {getIdLabel(inv.customerTaxId)}: {inv.customerTaxId}
                   </span>
                 </div>
 
-                {/* Address / Table */}
-                <div className="order-4 col-span-2 min-w-0 text-xs text-zinc-300 @3xl:order-none @3xl:col-span-3">
+                <div className="order-4 col-span-2 min-w-0 text-xs text-zinc-600 @3xl:order-none @3xl:col-span-3">
                   <p className="truncate">{inv.tableOrAddress}</p>
                   <p className="text-[11px] text-zinc-400">
-                    {inv.totals.totalItems} ítems · Base {formatUSD(inv.totals.netBase)} + IVA{' '}
+                    {inv.totals.totalItems} ítems · Base{' '}
+                    {formatUSD(inv.totals.netBase)} + IVA{' '}
                     {formatUSD(inv.totals.ivaTax)}
                   </p>
                 </div>
 
-                {/* Amount */}
-                <div className="font-mono-tabular order-3 text-right text-sm font-bold text-white @3xl:order-none @3xl:col-span-2 @3xl:text-xs">
+                <div className="font-mono-tabular order-3 text-right text-sm font-extrabold text-[#E11D2E] @3xl:order-none @3xl:col-span-2">
                   {formatUSD(inv.totals.grandTotal)}
                 </div>
 
-                {/* Status & Action Buttons */}
                 <div className="order-5 col-span-2 flex items-center justify-end gap-2 @3xl:order-none @3xl:col-span-2">
                   <button
                     type="button"
                     onClick={() => onInspectInvoice(inv)}
                     aria-label={`Ver factura ${inv.folio}`}
-                    className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1 text-[11px] font-semibold text-white transition-opacity hover:opacity-90 ${
+                    className={`inline-flex items-center gap-1 rounded-full px-3.5 py-1 text-[11px] font-bold text-white transition-opacity hover:opacity-90 ${
                       inv.status === 'emitida'
-                        ? 'bg-[#4CAF50]'
-                        : 'bg-[#D99B26]'
+                        ? 'bg-emerald-600'
+                        : 'bg-amber-500'
                     }`}
                   >
                     <Printer className="h-3 w-3" />
-                    <span>{inv.status === 'emitida' ? 'Ver RIDE' : 'Anulada'}</span>
+                    <span>
+                      {inv.status === 'emitida' ? 'Ver RIDE' : 'Anulada'}
+                    </span>
                   </button>
 
                   {inv.status === 'emitida' && (
@@ -252,7 +265,7 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
                       type="button"
                       onClick={() => setCancellingId(inv.id)}
                       aria-label={`Anular factura ${inv.folio}`}
-                      className="inline-flex items-center gap-1 rounded-full bg-[#38383C] px-2.5 py-1 text-[11px] font-medium text-zinc-300 hover:bg-red-600 hover:text-white"
+                      className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-[11px] font-bold text-zinc-600 hover:bg-[#E11D2E] hover:text-white"
                     >
                       <Ban className="h-3 w-3" />
                       <span>Anular</span>
@@ -262,26 +275,26 @@ export const InvoiceHistoryView: React.FC<InvoiceHistoryViewProps> = ({
               </div>
 
               {cancellingId === inv.id && (
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-700 pt-3">
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-dashed border-zinc-200 pt-3">
                   <input
                     type="text"
                     value={cancelReason}
                     onChange={(e) => setCancelReason(e.target.value)}
                     placeholder="Motivo de anulación / Nota de Crédito..."
-                    className="flex-1 rounded-full border border-zinc-600 bg-[#18181A] px-3.5 py-1.5 text-xs text-white"
+                    className="flex-1 rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-xs text-zinc-900"
                   />
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleConfirmCancel(inv.id)}
-                      className="rounded-full bg-[#F04E3E] px-3.5 py-1.5 text-xs font-semibold text-white"
+                      className="rounded-full bg-[#E11D2E] px-3.5 py-1.5 text-xs font-bold text-white"
                     >
                       Confirmar Nota de Crédito
                     </button>
                     <button
                       type="button"
                       onClick={() => setCancellingId(null)}
-                      className="rounded-full bg-[#38383C] px-3.5 py-1.5 text-xs text-zinc-300"
+                      className="rounded-full bg-zinc-100 px-3.5 py-1.5 text-xs font-bold text-zinc-600"
                     >
                       Cancelar
                     </button>
